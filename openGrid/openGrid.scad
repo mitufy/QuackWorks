@@ -79,12 +79,12 @@ Screw_Head_CounterSunk_Degree = 90;
 
 /*[Screw Cap Options]*/
 //Generate caps to hide mounting holes after installation, enhancing the appearance of the board.
-Add_Screw_Cap = false;
+Add_Screw_Caps = false;
 //When screw caps are enabled, Screw_Head_Inset increases automatically to accommodate the cap.
 Screw_Cap_Thickness = 1; //0.1
 Screw_Cap_Tolerance = 0.1; //0.01
 //Flip and align caps to the top of the board, convenient when printing facing down.
-Screw_Cap_Print_Orientation_Flip = false;
+Screw_Cap_Flip_For_Printing = false;
 
 /*[Cutout Options]*/
 //Use cutouts to further customize the shape of the board.
@@ -127,6 +127,7 @@ adjustedStackCount = Add_Adhesive_Base ? 1 : Stack_Count;
 adjustedInterfaceThickness =
     Stacking_Method == "Interface Layer" ? Interface_Thickness : 0;
 parsedCutoutCoordinates = Add_Cutouts ? parseCutoutCoordinates(Cutout_Coordinates) : [];
+normalizedParsedCutoutBounds = [for (cutoutVector = parsedCutoutCoordinates) normalizedCutoutBounds(cutoutVector)];
 
 if (Fill_Space_Mode == "Complete Tiles Only")
     FillSpaceFullTiles();
@@ -240,7 +241,7 @@ module openGridLite(Board_Width, Board_Height, tileSize = 28, Screw_Mounting = "
                     down(Adhesive_Base_Thickness)
                     force_tag("remove")
                         for (cutoutVector = parsedCutoutCoordinates)
-                            cutoutCuboid(cutoutVector, Board_Width=Board_Width, Board_Height=Board_Height, tileSize=Tile_Size, Tile_Thickness=total_thickness, Accurate_Side_Sweep=false);
+                            cutoutCuboid(cutoutVector, Board_Width=Board_Width, Board_Height=Board_Height, tileSize=tileSize, Tile_Thickness=total_thickness, Accurate_Side_Sweep=false);
                 }
 
             children();
@@ -549,16 +550,16 @@ module applyTileCornerModifications(Board_Width, Board_Height, tileSize = 28, Ti
     }
     module screw_hole() {
         Screw_Cap_Middle_Thinning= 0.6;
-        Final_Screw_Head_Inset = max(0.01,(Add_Screw_Cap && Screw_Cap_Thickness > 0 && Stack_Count == 1 && Board_Type != "Heavy" ? max(0 , Screw_Cap_Thickness) + Screw_Head_Inset : Screw_Head_Inset));
+        Final_Screw_Head_Inset = max(0.01,(Add_Screw_Caps && Screw_Cap_Thickness > 0 && Stack_Count == 1 && Board_Type != "Heavy" ? max(0 , Screw_Cap_Thickness) + Screw_Head_Inset : Screw_Head_Inset));
         //idea for screw hole caps comes from Gavin F
-        if (Add_Screw_Cap && Screw_Cap_Thickness > 0 && Stack_Count == 1 && Board_Type != "Heavy" && !Add_Adhesive_Base) {
-            Screw_Cap_Up_Distance =
-                Screw_Cap_Print_Orientation_Flip ? Tile_Thickness
+        if (Add_Screw_Caps && Screw_Cap_Thickness > 0 && Stack_Count == 1 && Board_Type != "Heavy" && !Add_Adhesive_Base) {
+            Screw_Cap_Z_Offset =
+                Screw_Cap_Flip_For_Printing ? Tile_Thickness
                 : Board_Type == "Lite" ? Tile_Thickness - Lite_Tile_Thickness
                 : 0;
             tag_diff(tag="keep",remove="remove")
-                right(Tile_Size / 2) fwd(Tile_Size / 2) 
-                    up(Screw_Cap_Up_Distance) xrot(Screw_Cap_Print_Orientation_Flip?180:0)
+                right(tileSize / 2) fwd(tileSize / 2) 
+                    up(Screw_Cap_Z_Offset) xrot(Screw_Cap_Flip_For_Printing?180:0)
                             tag("")cyl(l=Screw_Cap_Thickness, d=Screw_Head_Diameter - Screw_Cap_Tolerance, $fn=64,anchor=BOTTOM)
                             if(Screw_Cap_Middle_Thinning > 0)
                                 attach(TOP,TOP,inside=true)
@@ -787,10 +788,10 @@ function normalizedCutoutBounds(cutoutVector) =
         ]
         : [];
 
-function screwHoleTouchesCutout(rowIndex, columnIndex, cutouts = parsedCutoutCoordinates, cutoutIndex = 0) =
+function screwHoleTouchesCutout(rowIndex, columnIndex, cutouts = normalizedParsedCutoutBounds, cutoutIndex = 0) =
     cutoutIndex >= len(cutouts)
         ? false
-        : let(bounds = normalizedCutoutBounds(cutouts[cutoutIndex]))
+        : let(bounds = cutouts[cutoutIndex])
             (
                 len(bounds) == 4
                 && rowIndex >= bounds[0] - 1
@@ -804,10 +805,10 @@ function screwHoleTouchesCutout(rowIndex, columnIndex, cutouts = parsedCutoutCoo
             )
             || screwHoleTouchesCutout(rowIndex, columnIndex, cutouts, cutoutIndex + 1);
 
-function connectorHoleTouchesCutout(side, seamIndex, boardWidth, boardHeight, cutouts = parsedCutoutCoordinates, cutoutIndex = 0) =
+function connectorHoleTouchesCutout(side, seamIndex, boardWidth, boardHeight, cutouts = normalizedParsedCutoutBounds, cutoutIndex = 0) =
     cutoutIndex >= len(cutouts)
         ? false
-        : let(bounds = normalizedCutoutBounds(cutouts[cutoutIndex]))
+        : let(bounds = cutouts[cutoutIndex])
             (
                 len(bounds) == 4
                 && (
